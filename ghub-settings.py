@@ -4,6 +4,7 @@
 # https://pynative.com/python-sqlite-blob-insert-and-retrieve-digital-data/
 
 import datetime
+import json
 import os
 import sys
 import shutil
@@ -92,6 +93,13 @@ Error:
         print(error_message.format(file_path=file_path, exception_message=error))
 
 
+def sort_settings_data(settings_data) -> str:
+    j = json.loads(settings_data)
+    #sorted_names = [c["name"] for c in j["cards"]["cards"]]
+    j["cards"]["cards"].sort(key=lambda c: f'{c.get("name")}{c.get("id")}') # sort cards in place by name-then-id
+    return json.dumps(j, indent=2).encode('utf-8')
+
+
 def read_blob_data(data_id, file_path):
     sqlite_connection = 0
     try:
@@ -105,6 +113,7 @@ def read_blob_data(data_id, file_path):
         for row in record:
             print("Id = ", row[0])
             settings_data = row[1]
+            settings_data = sort_settings_data(settings_data)
             write_to_file(settings_data, settings_file_path)
         cursor.close()
 
@@ -164,6 +173,7 @@ Quitting...
         print(failure_to_find_settings_db.format(path=DEFAULT_PATH_SETTINGS_DB))
         exit(10)
 
+    '''
     program_introduction_notification = """
 This program is intended to extract and replace the settings.json inside the settings.db used by Logitech G Hub.
  
@@ -175,8 +185,10 @@ Press Enter to continue.
     else:
         input()
     print("This program will extract the settings from the database...")
+    '''
     latest_id = get_latest_id(DEFAULT_PATH_SETTINGS_DB)
     file_written = read_blob_data(latest_id, DEFAULT_PATH_SETTINGS_DB)
+    '''
     make_backup(DEFAULT_PATH_SETTINGS_DB)
     print("IMPORTANT: PLEASE CLOSE LG G HUB NOW")
     print("The extracted file will be open after you press Enter.")
@@ -194,3 +206,4 @@ Press Enter to continue.
     insert_blob(latest_id, file_written, DEFAULT_PATH_SETTINGS_DB)
     print("The settings have been updated.")
     exit(0)
+    '''
