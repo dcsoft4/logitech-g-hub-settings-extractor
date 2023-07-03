@@ -51,18 +51,17 @@ Error:
         print(error_message.format(source_path=file_path, destination_path=backup_file_path, exception_message=error))
         exit(42)
 
+
 def get_latest_id(file_path):
-    sqlite_connection = 0
+    latest_id = -1
     try:
-        sqlite_connection = sqlite3.connect(file_path)
-        cursor = sqlite_connection.cursor()
+        with sqlite3.connect(file_path) as sqlite_connection:
+            cursor = sqlite_connection.cursor()
 
-        sql_get_latest_id = 'select MAX(_id) from DATA'
-        cursor.execute(sql_get_latest_id)
-        record = cursor.fetchall()
-        latest_id = record[0][0]
-
-        return latest_id
+            sql_get_latest_id = 'select MAX(_id) from DATA'
+            cursor.execute(sql_get_latest_id)
+            record = cursor.fetchall()
+            latest_id = record[0][0]
     except sqlite3.Error as error:
         error_message = """
 ERROR: Failed to read latest id from the table inside settings.db file:
@@ -72,10 +71,7 @@ Error:
 {exception_message}
         """
         print(error_message.format(file_path=file_path, exception_message=error))
-    finally:
-        if sqlite_connection:
-            sqlite_connection.close()
-
+    return latest_id
 
 def write_to_file(data, file_path):
     # Convert binary data to proper format and write it on Hard Disk
@@ -96,33 +92,28 @@ Error:
 def sort_settings_data(settings_data) -> str:
     j = json.loads(settings_data)
     #sorted_names = [c["name"] for c in j["cards"]["cards"]]
-    j["cards"]["cards"].sort(key=lambda c: f'{c.get("name")}{c.get("id")}') # sort cards in place by name-then-id
+    j["cards"]["cards"].sort(key=lambda card: f'{card.get("name")}{card.get("id")}') # sort cards in place by name-then-id
     return json.dumps(j, indent=2).encode('utf-8')
 
 
 def read_blob_data(data_id, file_path):
+    settings_file_path = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON
     sqlite_connection = 0
     try:
-        sqlite_connection = sqlite3.connect(file_path)
-        cursor = sqlite_connection.cursor()
-
-        sql_fetch_blob_query = """SELECT _id, FILE from DATA where _id = ?"""
-        cursor.execute(sql_fetch_blob_query, (data_id,))
-        record = cursor.fetchall()
-        settings_file_path = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON
-        for row in record:
-            print("Id = ", row[0])
-            settings_data = row[1]
-            settings_data = sort_settings_data(settings_data)
-            write_to_file(settings_data, settings_file_path)
-        cursor.close()
-
-        return settings_file_path
+        with sqlite3.connect(file_path) as sqlite_connection:
+            cursor = sqlite_connection.cursor()
+            sql_fetch_blob_query = "SELECT _id, FILE from DATA where _id = ?"
+            cursor.execute(sql_fetch_blob_query, (data_id,))
+            record = cursor.fetchall()
+            for row in record:
+                print("Id = ", row[0])
+                settings_data = row[1]
+                settings_data = sort_settings_data(settings_data)
+                write_to_file(settings_data, settings_file_path)
+            cursor.close()
     except sqlite3.Error as error:
         print("Failed to read blob data from sqlite table", error)
-    finally:
-        if sqlite_connection:
-            sqlite_connection.close()
+    return settings_file_path
 
 
 def convert_to_binary_data(file_path):
