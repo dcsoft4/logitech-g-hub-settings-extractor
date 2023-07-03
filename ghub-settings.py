@@ -8,52 +8,42 @@ import json
 import os
 import sys
 import shutil
+from typing import(Tuple)
 import sqlite3
 
-DEFAULT_FOLDER_LG_GHUB_SETTINGS = None
-
-if sys.platform.startswith('win'): # Windows
-    DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('%LOCALAPPDATA%/LGHUB/') # Must end with /
-elif sys.platform.startswith('darwin'): # MacOS
-    DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('$HOME/Library/Application Support/lghub/') # Must end with /
-else:
-    error_message = """
-ERROR: Unsupported platform
-{platform}
-    """
-    print(error_message.format(platform=sys.platform))
-    exit(1)
-
+DEFAULT_FOLDER_LG_GHUB_SETTINGS = ""
+DEFAULT_PATH_SETTINGS_DB = ""
 DEFAULT_FILENAME_SETTINGS_DB = 'settings.db'
 DEFAULT_FILENAME_SETTINGS_JSON = 'EDIT_ME.json'
-DEFAULT_PATH_SETTINGS_DB = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_DB
+
+
+def init_dirs() -> bool:
+    global DEFAULT_FOLDER_LG_GHUB_SETTINGS, DEFAULT_PATH_SETTINGS_DB
+
+    if sys.platform.startswith('win'): # Windows
+        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('%LOCALAPPDATA%/LGHUB/')   # Must end with /
+    elif sys.platform.startswith('darwin3'):    # MacOS
+        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('$HOME/Library/Application Support/lghub/')    # Must end with /
+    else:
+        return False
+    DEFAULT_PATH_SETTINGS_DB = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_DB
+    return True
 
 
 def make_backup(file_path):
     backup_file_path = file_path + datetime.datetime.now().strftime('.%Y-%m-%d_%H-%M-%S')
     try:
         shutil.copy(file_path, backup_file_path)
-        backup_message = """
-A backup of the settings.db file has been made to:
-{backup_file_path}        
-        """
-        print(backup_message.format(backup_file_path=backup_file_path))
+        print(f"A backup of the settings.db file has been made to:\n{backup_file_path}")
     except Exception as error:
-        error_message = """
-ERROR: Failed to make a backup of the settings.db file! From:
-{source_path}
-To:
-{destination_path}
-Since this is a critical failure, the program will quit.
-Error:
-{exception_message}
-        """
-        print(error_message.format(source_path=file_path, destination_path=backup_file_path, exception_message=error))
+        print(
+            f"ERROR: Failed to make a backup of the settings.db file! From:\n{file_path}\nTo:\n{backup_file_path}\n\nSince this is a critical failure, the program will quit.\n\nError:{error}")
         exit(42)
 
 
-def get_latest_id(file_path):
+def get_latest_id(file_path) -> Tuple[int, str]:
     latest_id = -1
+    error_message = ""
     try:
         with sqlite3.connect(file_path) as sqlite_connection:
             cursor = sqlite_connection.cursor()
@@ -63,21 +53,14 @@ def get_latest_id(file_path):
             record = cursor.fetchall()
             latest_id = record[0][0]
     except sqlite3.Error as error:
-        error_message = """
-ERROR: Failed to read latest id from the table inside settings.db file:
-{file_path}
-This program will quit.
-Error:
-{exception_message}
-        """
-        print(error_message.format(file_path=file_path, exception_message=error))
-    return latest_id
+        error_message = f"ERROR: Failed to read latest id from the table inside {file_path}\nThis program will quit.\n\nError: {error}"
+    return latest_id, error_message
 
-def write_to_file(data, file_path):
-    # Convert binary data to proper format and write it on Hard Disk
+
+def write_blob_to_file(blob, file_path) -> Tuple[bool, str]:
     try:
         with open(file_path, 'wb') as file:
-            file.write(data)
+            file.write(blob)
         print("Stored blob data into: ", file_path, "\n")
     except Exception as error:
         error_message = """
@@ -91,8 +74,9 @@ Error:
 
 def sort_settings_data(settings_data) -> str:
     j = json.loads(settings_data)
-    #sorted_names = [c["name"] for c in j["cards"]["cards"]]
-    j["cards"]["cards"].sort(key=lambda card: f'{card.get("name")}{card.get("id")}') # sort cards in place by name-then-id
+    # sorted_names = [c["name"] for c in j["cards"]["cards"]]
+    j["cards"]["cards"].sort(
+        key=lambda card: f'{card.get("name")}{card.get("id")}')  # sort cards in place by name-then-id
     return json.dumps(j, indent=2).encode('utf-8')
 
 
@@ -109,7 +93,7 @@ def read_blob_data(data_id, file_path):
                 print("Id = ", row[0])
                 settings_data = row[1]
                 settings_data = sort_settings_data(settings_data)
-                write_to_file(settings_data, settings_file_path)
+                write_blob_to_file(settings_data, settings_file_path)
             cursor.close()
     except sqlite3.Error as error:
         print("Failed to read blob data from sqlite table", error)
@@ -154,20 +138,19 @@ def insert_blob(data_id, updated_settings_file_path, db_file_path):
             sqlite_connection.close()
 
 
-if __name__ == '__main__':
+def main() -> int:
+    if not init_dirs():
+        print(f"ERROR: Unsupported platform:  {sys.platform}")
+        return 1
+
     if not os.path.exists(DEFAULT_PATH_SETTINGS_DB):
-        failure_to_find_settings_db = """
-ERROR: The file settings.db was not found! The path below was checked:
-{path}
-Quitting...
-        """
-        print(failure_to_find_settings_db.format(path=DEFAULT_PATH_SETTINGS_DB))
-        exit(10)
+        print(f"ERROR: The file settings.db was not found! The path below was checked:\n{DEFAULT_PATH_SETTINGS_DB}\nQuitting...")
+        return 2
 
     '''
     program_introduction_notification = """
 This program is intended to extract and replace the settings.json inside the settings.db used by Logitech G Hub.
- 
+
 Press Enter to continue.
     """
     print(program_introduction_notification)
@@ -177,7 +160,11 @@ Press Enter to continue.
         input()
     print("This program will extract the settings from the database...")
     '''
-    latest_id = get_latest_id(DEFAULT_PATH_SETTINGS_DB)
+    latest_id, error_message = get_latest_id(DEFAULT_PATH_SETTINGS_DB)
+    if latest_id <= 0:
+        print(error_message)
+        return 3
+
     file_written = read_blob_data(latest_id, DEFAULT_PATH_SETTINGS_DB)
     '''
     make_backup(DEFAULT_PATH_SETTINGS_DB)
@@ -196,5 +183,9 @@ Press Enter to continue.
         print(file_written)
     insert_blob(latest_id, file_written, DEFAULT_PATH_SETTINGS_DB)
     print("The settings have been updated.")
-    exit(0)
     '''
+    return 0
+
+
+if __name__ == '__main__':
+    exit(main())
