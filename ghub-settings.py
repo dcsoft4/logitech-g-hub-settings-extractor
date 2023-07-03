@@ -8,7 +8,7 @@ import json
 import os
 import sys
 import shutil
-from typing import(Tuple)
+from typing import (Tuple)
 import sqlite3
 
 DEFAULT_FOLDER_LG_GHUB_SETTINGS = ""
@@ -20,10 +20,11 @@ DEFAULT_FILENAME_SETTINGS_JSON = 'EDIT_ME.json'
 def init_dirs() -> bool:
     global DEFAULT_FOLDER_LG_GHUB_SETTINGS, DEFAULT_PATH_SETTINGS_DB
 
-    if sys.platform.startswith('win'): # Windows
-        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('%LOCALAPPDATA%/LGHUB/')   # Must end with /
-    elif sys.platform.startswith('darwin3'):    # MacOS
-        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('$HOME/Library/Application Support/lghub/')    # Must end with /
+    if sys.platform.startswith('win'):  # Windows
+        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('%LOCALAPPDATA%/LGHUB/')  # Must end with /
+    elif sys.platform.startswith('darwin3'):  # MacOS
+        DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars(
+            '$HOME/Library/Application Support/lghub/')  # Must end with /
     else:
         return False
     DEFAULT_PATH_SETTINGS_DB = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_DB
@@ -57,7 +58,7 @@ def get_latest_id(file_path) -> Tuple[int, str]:
     return latest_id, error_message
 
 
-def write_blob_to_file(blob, file_path) -> Tuple[bool, str]:
+def write_json_to_file(blob, file_path) -> Tuple[bool, str]:
     try:
         with open(file_path, 'wb') as file:
             file.write(blob)
@@ -72,17 +73,27 @@ Error:
         print(error_message.format(file_path=file_path, exception_message=error))
 
 
-def sort_settings_data(settings_data) -> str:
-    j = json.loads(settings_data)
+def sort_settings(settings: str) -> str:
+    j = json.loads(settings)
     # sorted_names = [c["name"] for c in j["cards"]["cards"]]
     j["cards"]["cards"].sort(
         key=lambda card: f'{card.get("name")}{card.get("id")}')  # sort cards in place by name-then-id
     return json.dumps(j, indent=2).encode('utf-8')
 
 
-def read_blob_data(data_id, file_path):
-    settings_file_path = DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON
+def add_brightness(settings: str) -> str:
+    j = json.loads(settings)
+
+    #abc
+
+    return json.dumps(j, indent=2).encode('utf-8')
+
+
+
+
+def get_settings_json(data_id, file_path) -> str:
     sqlite_connection = 0
+    settings: str = ""
     try:
         with sqlite3.connect(file_path) as sqlite_connection:
             cursor = sqlite_connection.cursor()
@@ -92,12 +103,15 @@ def read_blob_data(data_id, file_path):
             for row in record:
                 print("Id = ", row[0])
                 settings_data = row[1]
-                settings_data = sort_settings_data(settings_data)
-                write_blob_to_file(settings_data, settings_file_path)
+                settings = settings_data
             cursor.close()
     except sqlite3.Error as error:
         print("Failed to read blob data from sqlite table", error)
-    return settings_file_path
+    return settings
+
+
+def write_settings_json(settings: str, json_file_path):
+    write_json_to_file(settings, json_file_path)
 
 
 def convert_to_binary_data(file_path):
@@ -144,7 +158,7 @@ def main() -> int:
         return 1
 
     if not os.path.exists(DEFAULT_PATH_SETTINGS_DB):
-        print(f"ERROR: The file settings.db was not found! The path below was checked:\n{DEFAULT_PATH_SETTINGS_DB}\nQuitting...")
+        print(f"ERROR: The file settings.db was not found:\n{DEFAULT_PATH_SETTINGS_DB}\n\nQuitting...")
         return 2
 
     '''
@@ -165,25 +179,33 @@ Press Enter to continue.
         print(error_message)
         return 3
 
-    file_written = read_blob_data(latest_id, DEFAULT_PATH_SETTINGS_DB)
-    '''
+    settings = get_settings_json(latest_id, DEFAULT_PATH_SETTINGS_DB)
+    write_settings_json(settings, DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON)
+    settings = sort_settings(settings)
+    settings = add_brightness(settings)
+    write_settings_json(settings, DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON + '2')
+
     make_backup(DEFAULT_PATH_SETTINGS_DB)
+
     print("IMPORTANT: PLEASE CLOSE LG G HUB NOW")
+    '''
     print("The extracted file will be open after you press Enter.")
     print("Please edit it and don't forget to save the file then close the file (and the program that opened with)")
+    '''
     if sys.version_info[0] < 3:
         raw_input()
     else:
         input()
+    '''
     if sys.platform.startswith('win'): # Windows
         os.system(file_written)
     elif sys.platform.startswith('darwin'): # MacOS
         os.system('open "' + file_written + '"')
     else:
         print(file_written)
-    insert_blob(latest_id, file_written, DEFAULT_PATH_SETTINGS_DB)
-    print("The settings have been updated.")
     '''
+    insert_blob(latest_id, DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON + '2', DEFAULT_PATH_SETTINGS_DB)
+    print("The settings have been updated.")
     return 0
 
 
