@@ -22,7 +22,7 @@ def init_dirs() -> bool:
 
     if sys.platform.startswith('win'):  # Windows
         DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars('%LOCALAPPDATA%/LGHUB/')  # Must end with /
-    elif sys.platform.startswith('darwin3'):  # MacOS
+    elif sys.platform.startswith('darwin'):  # MacOS
         DEFAULT_FOLDER_LG_GHUB_SETTINGS = os.path.expandvars(
             '$HOME/Library/Application Support/lghub/')  # Must end with /
     else:
@@ -131,25 +131,20 @@ Error:
         exit(24)
 
 
-def insert_blob(data_id, updated_settings_file_path, db_file_path):
+def insert_blob(data_id, settings: str, db_file_path):
     sqlite_connection = 0
     try:
-        sqlite_connection = sqlite3.connect(db_file_path)
-        cursor = sqlite_connection.cursor()
-        sqlite_replace_blob_query = """ Replace INTO DATA
-                                  (_id, _date_created, FILE) VALUES (?, ?, ?)"""
-
-        blob = convert_to_binary_data(updated_settings_file_path)
-        # Convert data into tuple format
-        data_tuple = (data_id, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), blob)
-        cursor.execute(sqlite_replace_blob_query, data_tuple)
-        sqlite_connection.commit()
-        cursor.close()
+        with sqlite3.connect(db_file_path) as sqlite_connection:
+            cursor = sqlite_connection.cursor()
+            replace_query = "Replace INTO DATA (_id, _date_created, FILE) VALUES (?, ?, ?)"
+            blob = settings # convert_to_binary_data(updated_settings_file_path)
+            # Convert data into tuple format
+            data_tuple = (data_id, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), blob)
+            cursor.execute(replace_query, data_tuple)
+            sqlite_connection.commit()
+            cursor.close()
     except sqlite3.Error as error:
         print("Failed to insert blob data into sqlite table", error)
-    finally:
-        if sqlite_connection:
-            sqlite_connection.close()
 
 
 def main() -> int:
@@ -185,8 +180,6 @@ Press Enter to continue.
     settings = add_brightness(settings)
     write_settings_json(settings, DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON + '2')
 
-    make_backup(DEFAULT_PATH_SETTINGS_DB)
-
     print("IMPORTANT: PLEASE CLOSE LG G HUB NOW")
     '''
     print("The extracted file will be open after you press Enter.")
@@ -204,7 +197,8 @@ Press Enter to continue.
     else:
         print(file_written)
     '''
-    insert_blob(latest_id, DEFAULT_FOLDER_LG_GHUB_SETTINGS + DEFAULT_FILENAME_SETTINGS_JSON + '2', DEFAULT_PATH_SETTINGS_DB)
+    make_backup(DEFAULT_PATH_SETTINGS_DB)
+    insert_blob(latest_id, settings, DEFAULT_PATH_SETTINGS_DB)
     print("The settings have been updated.")
     return 0
 
